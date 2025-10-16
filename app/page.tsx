@@ -1,103 +1,141 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect } from "react"
+import { Input, Book } from "@/types/types"
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [input, setInput] = useState<Input>({ query: "", error: null });
+  const [books, setBooks] = useState<Book[]>([]);
+  const [searchBooks, setSearchBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    // load books from localStorage
+    const storedBooks = localStorage.getItem("myBooks");
+    if (storedBooks) {
+      setBooks(JSON.parse(storedBooks));
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setLoading(true);
+
+    const valid = input.query.trim().length > 0;
+
+    if (!valid) {
+      setInput({ ...input, error: "Please enter a search query." });
+      return;
+    }
+
+    const response = await fetch(`/api/search?q=${input.query}`);
+
+    if (!response.ok) {
+      setInput({ ...input, error: "Failed to fetch data from OpenLibrary." });
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      setInput({ ...input, error: data.error });
+      return;
+    }
+
+    setInput({ query: "", error: null });
+    setSearchBooks(data as Book[]);
+    setLoading(false);
+  }
+
+  const handleAddBook = (book: Book) => {
+    if (books.find(b => b.isbn === book.isbn)) {
+      alert("Book already in your list.");
+      return;
+    }
+
+    setBooks([...books, book]);
+    setSearchBooks(searchBooks.filter(b => b.isbn !== book.isbn));
+
+    // save books to localStorage
+    localStorage.setItem("myBooks", JSON.stringify([...books, book]));
+  }
+
+  const handleRemoveBook = (isbn: string) => {
+    const updatedBooks = books.filter(b => b.isbn !== isbn);
+    setBooks(updatedBooks);
+
+    // update localStorage
+    localStorage.setItem("myBooks", JSON.stringify(updatedBooks));
+  }
+
+  return (
+    <main className="flex w-full min-h-screen flex-col items-center p-24">
+      <h1 className="text-2xl font-bold">AI Book Search</h1>
+      <form onSubmit={handleSubmit} className="flex flex-row items-center w-fit">
+        <textarea
+          value={input.query}
+          onChange={(e) => setInput({ ...input, query: e.target.value })}
+          placeholder="Enter a description of a book or books you want to read..."
+          className="mt-4 p-2 border border-gray-300 rounded w-96 h-24 resize-none"
+        />
+        <button
+          type="submit"
+          className="mt-4 p-2 bg-blue-500 text-white rounded cursor-pointer"
+        >
+          {loading ? "Searching..." : "Search"}
+        </button>
+        {searchBooks.length > 0 && (
+          <button 
+            onClick={() => setSearchBooks([])}
+            className="mt-4 ml-2 p-2 bg-red-500 text-white rounded cursor-pointer"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Clear search results
+          </button>
+        )}
+      </form>
+
+      {/* Display search results */}
+      {searchBooks.length > 0 && (
+        <div className="mt-8 w-full max-w-4xl">
+          <h2 className="text-xl font-semibold mb-4">Search Results:</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {searchBooks.map((book, index) => (
+              <div key={index} className="border p-4 rounded shadow">
+                {book.imageUrl && (
+                  <img src={book.imageUrl} alt={book.title || "Book Cover"} className="mb-4 w-full h-auto" />
+                )}
+                <h3 className="text-lg font-bold">{book.title || "Title not available"}</h3>
+                <p className="text-sm text-gray-600 mb-2">{book.author || "Author not available"}</p>
+                <p className="text-sm">{book.summary || "No summary available."}</p>
+                <p className="text-xs text-gray-500 mt-2">ISBN: {book.isbn || "N/A"}</p>
+                <button className="mt-2 p-2 bg-green-500 text-white rounded cursor-pointer" onClick={() => handleAddBook(book)}> Add to My Books</button>
+              </div>
+            ))}
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+      )}
+
+      {/* My Books List */}
+      {books.length > 0 && (
+        <div className="mt-12 w-full max-w-4xl">
+          <h2 className="text-xl font-semibold mb-4">My Books:</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {books.map((book, index) => (
+              <div key={index} className="border p-4 rounded shadow relative">
+                <button onClick={() => handleRemoveBook(book.isbn)} className="cursor-pointer absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center">X</button>
+                {book.imageUrl && (
+                  <img src={book.imageUrl} alt={book.title || "Book Cover"} className="mb-4 w-full h-auto" />
+                )}
+                <h3 className="text-lg font-bold">{book.title || "Title not available"}</h3>
+                <p className="text-sm text-gray-600 mb-2">{book.author || "Author not available"}</p>
+                <p className="text-sm">{book.summary || "No summary available."}</p>
+                <p className="text-xs text-gray-500 mt-2">ISBN: {book.isbn || "N/A"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </main>
+  )
 }
